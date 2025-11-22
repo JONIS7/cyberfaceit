@@ -1,0 +1,4 @@
+[build]
+  base = "cybercoach-client"
+  publish = "dist"
+  command = "npm run build"
