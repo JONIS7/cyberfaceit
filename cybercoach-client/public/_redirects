@@ -1,0 +1,7 @@
+Redireciona tudo para o index.html (Para o React Router funcionar)
+
+/* /index.html  200
+
+Redireciona as chamadas da API para a função serverless correta
+
+/faceit/* /.netlify/functions/faceit/:splat  200
