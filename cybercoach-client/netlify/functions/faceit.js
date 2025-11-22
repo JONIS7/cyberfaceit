@@ -1,5 +1,3 @@
-import fetch from 'node-fetch';
-
 const FACEIT_API_KEY = "7c72e289-6cc6-4b5b-899e-d06a4f2a293a";
 
 export const handler = async (event, context) => {
@@ -18,7 +16,6 @@ export const handler = async (event, context) => {
 
     try {
         // Extract the path after /.netlify/functions/faceit/
-        // Example: /.netlify/functions/faceit/players?nickname=dxtzin -> players?nickname=dxtzin
         const path = event.path.replace(/^\/\.netlify\/functions\/faceit\/?/, '');
 
         // Reconstruct query parameters
@@ -27,6 +24,7 @@ export const handler = async (event, context) => {
 
         console.log(`[Proxy] Forwarding to: ${faceitUrl}`);
 
+        // Use native fetch (Node 18+)
         const response = await fetch(faceitUrl, {
             headers: {
                 'Authorization': `Bearer ${FACEIT_API_KEY}`,
@@ -35,6 +33,7 @@ export const handler = async (event, context) => {
         });
 
         if (!response.ok) {
+            console.error(`[Proxy Error] Upstream status: ${response.status}`);
             return {
                 statusCode: response.status,
                 body: JSON.stringify({ error: `Faceit API Error: ${response.statusText}` })
@@ -46,17 +45,17 @@ export const handler = async (event, context) => {
         return {
             statusCode: 200,
             headers: {
-                'Access-Control-Allow-Origin': '*', // Allow all origins
+                'Access-Control-Allow-Origin': '*',
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify(data)
         };
 
     } catch (error) {
-        console.error("Function Error:", error);
+        console.error("Function Crash:", error);
         return {
             statusCode: 500,
-            body: JSON.stringify({ error: "Internal Server Error" })
+            body: JSON.stringify({ error: "Internal Server Error", details: error.message })
         };
     }
 };
