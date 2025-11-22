@@ -1,21 +1,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area 
+  PieChart, Pie, Cell, ResponsiveContainer 
 } from 'recharts';
 import { 
   Zap, Swords, Activity, Skull, Bomb, Crosshair, 
-  Search, Loader2, Server, MonitorPlay, Calendar, Map as MapIcon, TrendingUp, User,
-  Target, Brain, CheckCircle2, AlertOctagon, Share2
+  Search, Loader2, Calendar, TrendingUp, Share2,
+  Target, Brain, CheckCircle2, AlertOctagon
 } from 'lucide-react';
 
 // --- IMPORTANTE PARA SUA MÁQUINA LOCAL ---
 // Para usar o compartilhamento de imagem, instale html2canvas:
 // npm install html2canvas
 // E descomente a linha abaixo:
-import html2canvas from 'html2canvas';
+// import html2canvas from 'html2canvas';
 
 // --- CONFIGURAÇÃO ---
-const LOCAL_PROXY_URL = "/.netlify/functions/faceit"; 
+// Detecta se está no localhost ou na nuvem
+const LOCAL_PROXY_URL = window.location.hostname === "localhost" 
+  ? "http://localhost:3001/faceit" 
+  : "/.netlify/functions/faceit";
 
 // --- HELPER: CORES E FORMAT ---
 const getRatingColor = (r) => r >= 1.15 ? "#4ade80" : r >= 0.97 ? "#fbbf24" : "#ef4444";
@@ -28,7 +31,7 @@ const getRatingLabel = (rating) => {
 
 const formatNum = (n, d=2) => n ? parseFloat(n).toFixed(d) : "0.00";
 
-// Helper de Data Relativa (Novo!)
+// Helper de Data Relativa
 const formatRelativeTime = (timestamp) => {
   if (!timestamp) return "-";
   const date = new Date(timestamp * 1000);
@@ -46,7 +49,6 @@ const formatRelativeTime = (timestamp) => {
 const detectPlaystyle = (stats) => {
   const { kpr, dpr, kast, impact } = stats.profile;
   
-  // Acesso seguro aos dados de categorias
   const entry = parseFloat(stats.categories?.entering?.items?.[0]?.value || 0); 
   const sniperKills = parseFloat(stats.categories?.sniping?.items?.[0]?.value || 0);
   const utilDmg = parseFloat(stats.categories?.utility?.items?.[0]?.value || 0); 
@@ -57,7 +59,6 @@ const detectPlaystyle = (stats) => {
   const rImpact = parseFloat(impact);
   const rKAST = parseFloat(kast);
 
-  // Hierarquia de decisão (do mais específico para o mais geral)
   if (sniperKills > 0.35) { 
     return { title: "AWPer", desc: "Especialista com a Sniper. Controla ângulos longos e busca picks decisivos." };
   } 
@@ -153,23 +154,21 @@ const MatchRow = ({ match }) => (
   </div>
 );
 
-// --- COMPONENTE: TACTICAL BRIEFING (Agora usa a função detectPlaystyle) ---
+// --- COMPONENTE: TACTICAL BRIEFING ---
 const TacticalBriefing = ({ stats }) => {
   if (!stats || !stats.profile) return null;
 
   const { kpr, dpr, adr, kast, impact, rating } = stats.profile;
-  const playstyleData = detectPlaystyle(stats); // Usa a nova lógica dinâmica
+  const playstyleData = detectPlaystyle(stats);
 
   const pros = [];
   const cons = [];
 
-  // Lógica de Pontos Fortes (Simplificada para leitura)
   if (parseFloat(rating) >= 1.15) pros.push("Rating de elite (>1.15). Você carrega o time.");
   if (parseFloat(adr) > 85) pros.push("Dano massivo (>85). Pressão constante.");
   if (parseFloat(kast) > 74) pros.push("KAST Sólido. Contribui quase todo round.");
   if (parseFloat(dpr) < 0.60) pros.push("Difícil de matar. Posicionamento seguro.");
   
-  // Lógica de Pontos Fracos
   if (parseFloat(rating) < 0.95) cons.push("Impacto baixo. Participe mais das jogadas decisivas.");
   if (parseFloat(adr) < 65) cons.push("Dano crítico. Treine spray e mira.");
   if (parseFloat(dpr) > 0.75) cons.push("Feeding. Evite avanços sem necessidade.");
@@ -224,17 +223,13 @@ const CyberCoach = () => {
   const [loading, setLoading] = useState(false);
   const [searchNick, setSearchNick] = useState('dxtzin'); 
   const [stats, setStats] = useState(null);
-  const [, setConnectionStatus] = useState('checking');
   const [timeRange, setTimeRange] = useState('last'); 
   const dashboardRef = useRef(null);
 
   const fetchData = async (endpoint) => {
     try {
         const res = await fetch(`${LOCAL_PROXY_URL}/${endpoint}`);
-        if (res.ok) {
-            setConnectionStatus('local');
-            return await res.json();
-        }
+        if (res.ok) return await res.json();
     } catch (e) {}
     throw new Error("Backend Offline");
   };
@@ -250,51 +245,18 @@ const CyberCoach = () => {
     }
   };
 
-  // --- FUNÇÃO DE COMPARTILHAR (Versão Texto - Compatível com Preview) ---
-  // Para ativar a versão de imagem na sua máquina, descomente a importação
-  // do html2canvas e substitua esta função pela versão comentada no final do arquivo.
-   // --- VERSÃO COM IMAGEM (USE ESTA LOCALMENTE) ---
-  const handleShare = async () => {
-    if (!dashboardRef.current || !stats) return;
-
-    try {
-      const canvas = await html2canvas(dashboardRef.current, {
-        backgroundColor: '#0b0e13',
-        scale: 2, 
-        useCORS: true 
-      });
-
-      canvas.toBlob(async (blob) => {
-        if (!blob) return;
-        const file = new File([blob], `cybercoach_${stats.profile.nick}.png`, { type: 'image/png' });
-        
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          try {
-            await navigator.share({
-              title: 'CyberCoach Stats',
-              text: `Olha minhas stats no CS2! Rating: ${stats.profile.rating}`,
-              files: [file]
-            });
-          } catch (err) {
-            downloadImage(canvas);
-          }
-        } else {
-          downloadImage(canvas);
-        }
-      });
-    } catch (error) {
-      console.error('Erro ao gerar imagem:', error);
-      alert('Erro ao criar imagem. Verifique se html2canvas está instalado.');
+  const handleShare = () => {
+    if (!stats) return;
+    const text = `Confira minhas stats no CyberCoach!\nPlayer: ${stats.profile.nick}\nRating: ${stats.profile.rating}\nK/D: ${stats.profile.kpr}/${stats.profile.dpr}`;
+    
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+            alert("Resumo copiado! (Para imagem, ative html2canvas localmente)");
+        }).catch(err => console.error(err));
+    } else {
+         alert("Resumo:\n" + text);
     }
   };
-
-  const downloadImage = (canvas) => {
-    const link = document.createElement('a');
-    link.download = `cybercoach_${stats.profile.nick}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-  };
-  
 
   const runAnalysis = async (nickname, range) => {
     setLoading(true);
@@ -335,10 +297,7 @@ const CyberCoach = () => {
         const mk = parseInt(pStats.Kills);
         const md = parseInt(pStats.Deaths);
         const ma = parseInt(pStats.Assists);
-        const mhs = parseInt(pStats['Headshots %']);
-        const mmvps = parseInt(pStats.MVPs);
         const msniper = parseInt(pStats['Sniper Kills'] || 0);
-        
         const scoreParts = r.round_stats.Score.split(' / ');
         const matchRounds = parseInt(scoreParts[0]) + parseInt(scoreParts[1]) || 24;
         
@@ -354,21 +313,14 @@ const CyberCoach = () => {
         const isWin = r.round_stats.Winner === myTeamId;
         if(isWin) wins++;
 
+        // Cálculo Individual (Listagem)
         const mKPR = mk / matchRounds;
         const mDPR = md / matchRounds;
         const mAPR = ma / matchRounds;
         const mADR = ((mk * 92) + (ma * 25)) / matchRounds; 
         const mKAST_Val = ((1 - (md/matchRounds)) + (mKPR * 0.45) + (mAPR * 0.4)) * 100;
         const mImpact = 2.13 * mKPR + 0.42 * mAPR - 0.41;
-
-        const mRating = (
-          0.0073 * Math.min(100, mKAST_Val) + 
-          0.3591 * mKPR - 
-          0.5329 * mDPR + 
-          0.2372 * mImpact + 
-          0.0032 * mADR + 
-          0.1587
-        ).toFixed(2);
+        const mRating = (0.0073 * Math.min(100, mKAST_Val) + 0.3591 * mKPR - 0.5329 * mDPR + 0.2372 * mImpact + 0.0032 * mADR + 0.1587).toFixed(2);
 
         matchHistoryList.push({
           map: r.round_stats.Map,
@@ -377,7 +329,6 @@ const CyberCoach = () => {
           k: mk, d: md, a: ma,
           rating: mRating,
           adr: mADR.toFixed(1),
-          // DATA FORMATADA CORRETAMENTE
           date: formatRelativeTime(m.meta.created_at) 
         });
       }
@@ -388,21 +339,11 @@ const CyberCoach = () => {
     const DPR = d / rounds;
     const APR = a / rounds;
     const ADR = ((k * 92) + (a * 25)) / rounds; 
-    
     const KAST_Val = ((1 - DPR) + (KPR * 0.45) + (APR * 0.4)) * 100;
     const KAST = Math.min(100, KAST_Val).toFixed(1);
-
     const multiKillRate = (triple + quadro * 1.8 + penta * 2.5) / matchesCount;
     const Impact = (2.13 * KPR + 0.42 * APR - 0.41 + (multiKillRate * 0.15)).toFixed(2);
-    
-    const Rating = (
-      0.0073 * KAST_Val + 
-      0.3591 * KPR - 
-      0.5329 * DPR + 
-      0.2372 * parseFloat(Impact) + 
-      0.0032 * ADR + 
-      0.1587
-    ).toFixed(2);
+    const Rating = (0.0073 * KAST_Val + 0.3591 * KPR - 0.5329 * DPR + 0.2372 * parseFloat(Impact) + 0.0032 * ADR + 0.1587).toFixed(2);
 
     const multiKillRounds = (triple + quadro + penta);
     const openingKillsEst = (k * 0.14); 
@@ -480,7 +421,6 @@ const CyberCoach = () => {
   };
 
   const loadMockData = (nick) => {
-    setConnectionStatus('demo');
     setStats({
       profile: { 
         nick, avatar: "", level: 10, country: "br", 
@@ -504,42 +444,22 @@ const CyberCoach = () => {
 
   useEffect(() => { runAnalysis('dxtzin', 'last'); }, []);
 
-  if (loading) return <div className="min-h-screen bg-[#0b0e13] flex flex-col items-center justify-center text-blue-500 font-mono"><Loader2 className="animate-spin mb-4" size={48} /><p className="tracking-widest text-white text-xs">PROCESSANDO ESTATÍSTICAS AVANÇADAS...</p></div>;
+  if (loading) return <div className="min-h-screen bg-[#0b0e13] flex flex-col items-center justify-center text-blue-500 font-mono"><Loader2 className="animate-spin mb-4" size={48} /><p className="tracking-widest text-white text-xs">PROCESSANDO ESTATÍSTICAS...</p></div>;
   if (!stats) return null;
 
   return (
     <div ref={dashboardRef} className="min-h-screen bg-[#0b0e13] text-gray-200 font-sans p-4 md:p-8 relative overflow-x-hidden">
       
-      {/* --- HERO SECTION (PROFILE) --- */}
       <div className="max-w-6xl mx-auto relative z-10 mb-8 bg-[#151922] border border-white/5 rounded-sm shadow-2xl flex flex-col md:flex-row overflow-hidden">
-        
-        {/* Botão de Compartilhar (MUDOU DE LUGAR) */}
-        <button 
-          onClick={handleShare}
-          className="absolute top-4 right-4 p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-all z-30 bg-black/20 backdrop-blur-sm border border-white/10"
-          title="Compartilhar Resumo"
-        >
+        <button onClick={handleShare} className="absolute top-4 right-4 p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-full transition-all z-30 bg-black/20 backdrop-blur-sm border border-white/10">
           <Share2 size={20} />
         </button>
 
-        {/* Foto e Busca */}
         <div className="md:w-1/3 relative bg-gradient-to-b from-[#1e232d] to-[#151922] p-6 flex flex-col items-center justify-center border-r border-white/5">
-          
-          <div className="absolute top-4 left-0 right-0 px-6 flex items-center justify-center z-20 pointer-events-none">
-          </div>
-
           <div className="relative w-full mb-6 z-30">
-              <input 
-                type="text" 
-                value={searchNick}
-                onChange={(e) => setSearchNick(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="bg-black/40 text-white px-3 py-1.5 pl-8 rounded border border-white/10 outline-none w-full text-sm focus:border-blue-500 transition-colors"
-                placeholder="Buscar Jogador..."
-              />
+              <input type="text" value={searchNick} onChange={(e) => setSearchNick(e.target.value)} onKeyDown={handleKeyDown} className="bg-black/40 text-white px-3 py-1.5 pl-8 rounded border border-white/10 outline-none w-full text-sm focus:border-blue-500 transition-colors" placeholder="Buscar Jogador..." />
               <Search className="absolute left-2.5 top-2 text-gray-500 pointer-events-none" size={14} />
           </div>
-
           <div className="mt-4 relative group">
             <div className="absolute inset-0 bg-blue-500/20 blur-3xl rounded-full opacity-0 group-hover:opacity-50 transition-opacity"></div>
             <img src={stats.profile.avatar} className="w-40 h-40 rounded-full object-cover border-4 border-[#242933] shadow-2xl relative z-10" />
@@ -552,7 +472,6 @@ const CyberCoach = () => {
           </div>
         </div>
 
-        {/* Stats Principais */}
         <div className="md:w-2/3 p-8 flex flex-col justify-between relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-yellow-500/5 blur-[80px] rounded-full pointer-events-none"></div>
           <div className="flex flex-col md:flex-row items-center justify-center gap-12 h-full">
@@ -587,24 +506,20 @@ const CyberCoach = () => {
         </div>
       </div>
 
-      {/* --- NOVA SEÇÃO: COACH BRIEFING --- */}
       <TacticalBriefing stats={stats} />
 
-      {/* --- GRID DENSO DE ESTATÍSTICAS (FIREPOWER, ENTERING...) --- */}
       <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         {Object.values(stats.categories).map((card, idx) => (
           <DetailCard key={idx} {...card} />
         ))}
       </div>
 
-      {/* MATCH HISTORY */}
       <div className="max-w-6xl mx-auto">
         <h3 className="text-sm font-bold text-gray-400 mb-4 flex items-center gap-2 uppercase tracking-widest"><Calendar className="text-blue-500" size={16} /> Histórico de Partidas</h3>
         <div className="space-y-1">
           {stats.matchHistory.map((match, idx) => <MatchRow key={idx} match={match} />)}
         </div>
       </div>
-
     </div>
   );
 };
